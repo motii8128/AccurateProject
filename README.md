@@ -1,8 +1,13 @@
 # AccurateProject
 2025年部内ロボコン「キアイダケ」チームのソフトウェア、ハードウェアについて
 
+|name|link|
+|:--:|:--:|
+|マイコンソフトウェア|![AccurateHardware](./)|
+
 # マイコンソフトウェア「AccurateHardware」
 
+![](./AccurateHardware/accurate_hardware.png)
 
 # マイコン制御基盤「AccurateBoard」
 
