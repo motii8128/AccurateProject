@@ -7,3 +7,7 @@
 # 電源基盤
 
 ![main_power_supplyer_image](./MainPowerSupply/main_power_supplyer.png)
+
+# 分電基盤
+
+![power_divider_image](./PowerDivider/power_divider.png)
