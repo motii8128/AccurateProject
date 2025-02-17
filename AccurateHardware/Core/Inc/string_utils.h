@@ -35,12 +35,13 @@ Recv parseSerialBuffer(uint8_t *buffer)
 
 	token = strtok(NULL, ",");
 	result.pwm_1 = atoi(token)- 300;
-
+	result.pwm_1 = result.pwm_1 * 10;
 	token = strtok(NULL, ",");
 	result.pwm_2 = atoi(token) - 300;
-
+	result.pwm_2 = result.pwm_2 * 10;
 	token = strtok(NULL, ",");
 	result.pwm_3 = atoi(token) - 300;
+	result.pwm_3 = result.pwm_3 * 10;
 
 	return result;
 }

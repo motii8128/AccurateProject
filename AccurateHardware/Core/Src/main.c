@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "can_utils.h"
 #include "robomaster_utils.h"
 #include "pid_utils.h"
@@ -55,7 +57,7 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 
-UART_HandleTypeDef huart3;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -70,7 +72,7 @@ static void MX_TIM2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM12_Init(void);
-static void MX_USART3_UART_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -79,7 +81,7 @@ static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN 0 */
 int _write(int file, char *ptr, int len)
 {
-  HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
+  HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,100);
   return len;
 }
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);
@@ -125,7 +127,7 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM8_Init();
   MX_TIM12_Init();
-  MX_USART3_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
@@ -144,22 +146,25 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(HAL_UART_Receive(&huart3, &buffer[index], 1, 1000) == HAL_OK)
+	  if(HAL_UART_Receive(&huart2, &serial_buffer[index], 1, 1000) == HAL_OK)
 		{
-			if(buffer[index] == '\n')
+			if(serial_buffer[index] == 'e')
 			{
-				Recv recv_packet = parseSerialBuffer(buffer);
+				int encode_1 = get_encoder_1();
+				int encode_2 = get_encoder_2();
+				printf("%d,%d,%d", encode_1, encode_2, fb.ampare[2]);
+				Recv recv_packet = parseSerialBuffer(serial_buffer);
 
 				int16_t rpm_1 = recv_packet.arm_1 * 36;
-				int16_t out_1 = pidCompute(&pid_1, rpm_1, fb.rpm[0], 0.02);
+				int16_t out_1 = pidCompute(&pid_1, rpm_1, fb.rpm[0], 0.05);
 				setCurrent(1, ROBOMASTER_M2006, out_1, &tx_packet);
 
 				int16_t rpm_2 = recv_packet.arm_2 * 36;
-				int16_t out_2 = pidCompute(&pid_2, rpm_2, fb.rpm[1], 0.02);
+				int16_t out_2 = pidCompute(&pid_2, rpm_2, fb.rpm[1], 0.05);
 				setCurrent(2, ROBOMASTER_M2006, out_2, &tx_packet);
 
 				int16_t rpm_3 = recv_packet.arm_3 * 36;
-				int16_t out_3 = pidCompute(&pid_3, rpm_3, fb.rpm[2], 0.02);
+				int16_t out_3 = pidCompute(&pid_3, rpm_3, fb.rpm[2], 0.05);
 				setCurrent(3, ROBOMASTER_M2006, out_3, &tx_packet);
 
 				motor_1_control(recv_packet.pwm_1);
@@ -167,13 +172,10 @@ int main(void)
 				motor_3_control(recv_packet.pwm_3);
 
 				CAN_TX(0x200, tx_packet.buf_1, &hcan1);
+
 				HAL_Delay(20);
-
-				int encode_1 = get_encoder_1();
-				int encode_2 = get_encoder_2();
-
-				printf("%d,%d,%d\n", encode_1, encode_2, fb.ampare[2]);
 				index = 0;
+
 			}
 			else
 			{
@@ -568,35 +570,35 @@ static void MX_TIM12_Init(void)
 }
 
 /**
-  * @brief USART3 Initialization Function
+  * @brief USART2 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART3_UART_Init(void)
+static void MX_USART2_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART3_Init 0 */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-  /* USER CODE END USART3_Init 0 */
+  /* USER CODE END USART2_Init 0 */
 
-  /* USER CODE BEGIN USART3_Init 1 */
+  /* USER CODE BEGIN USART2_Init 1 */
 
-  /* USER CODE END USART3_Init 1 */
-  huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
-  huart3.Init.WordLength = UART_WORDLENGTH_8B;
-  huart3.Init.StopBits = UART_STOPBITS_1;
-  huart3.Init.Parity = UART_PARITY_NONE;
-  huart3.Init.Mode = UART_MODE_TX_RX;
-  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart3) != HAL_OK)
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 230400;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART3_Init 2 */
+  /* USER CODE BEGIN USART2_Init 2 */
 
-  /* USER CODE END USART3_Init 2 */
+  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -666,17 +668,17 @@ void motor_1_control(int pow)
 	if(pow > 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, pow);
-		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_1_Pin, 0);
 	}
 	else if(pow < 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, abs(pow));
-		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 1);
+		HAL_GPIO_WritePin(GPIOA, DIR_1_Pin, 1);
 	}
 	else
 	{
 		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 0);
-		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_1_Pin, 0);
 	}
 }
 
@@ -685,17 +687,17 @@ void motor_2_control(int pow)
 	if(pow > 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, pow);
-		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_2_Pin, 0);
 	}
 	else if(pow < 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, abs(pow));
-		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 1);
+		HAL_GPIO_WritePin(GPIOA, DIR_2_Pin, 1);
 	}
 	else
 	{
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0);
-		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_2_Pin, 0);
 	}
 }
 
@@ -704,17 +706,17 @@ void motor_3_control(int pow)
 	if(pow > 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, pow);
-		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_3_Pin, 0);
 	}
 	else if(pow < 0)
 	{
 		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, abs(pow));
-		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 1);
+		HAL_GPIO_WritePin(GPIOA, DIR_3_Pin, 1);
 	}
 	else
 	{
 		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, 0);
-		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_3_Pin, 0);
 	}
 }
 
