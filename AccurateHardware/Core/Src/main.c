@@ -22,6 +22,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "can_utils.h"
+#include "robomaster_utils.h"
+#include "pid_utils.h"
+#include "string_utils.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +36,9 @@
 /* USER CODE BEGIN PD */
 volatile int val1 = 0;
 volatile int val2 = 0;
+RoboMasterFeedBack fb;
+RoboMasterCmd tx_packet;
+uint8_t serial_buffer[64];
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,7 +55,7 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 
-UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
@@ -57,13 +64,13 @@ UART_HandleTypeDef huart2;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART2_UART_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM12_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -75,6 +82,12 @@ int _write(int file, char *ptr, int len)
   HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
   return len;
 }
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);
+void motor_1_control(int pow);
+void motor_2_control(int pow);
+void motor_3_control(int pow);
+int get_encoder_1();
+int get_encoder_2();
 /* USER CODE END 0 */
 
 /**
@@ -94,7 +107,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  setbuf(stdout, NULL);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -106,35 +119,67 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART2_UART_Init();
   MX_CAN1_Init();
   MX_TIM3_Init();
   MX_TIM2_Init();
   MX_TIM1_Init();
   MX_TIM8_Init();
   MX_TIM12_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+  HAL_TIM_PWM_Start(&htim12, TIM_CHANNEL_2);
+  HAL_CAN_Start(&hcan1);
+  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+  PID pid_1 = pidInitialize(1.0, 0.0, 0.03);
+  PID pid_2 = pidInitialize(1.0, 0.0, 0.03);
+  PID pid_3 = pidInitialize(1.0, 0.0, 0.03);
+  int index = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  val1 = (float)TIM3->CNT * 0.043945312;
-	  val2 = (float)TIM2->CNT * 0.043945312;
+	  if(HAL_UART_Receive(&huart3, &buffer[index], 1, 1000) == HAL_OK)
+		{
+			if(buffer[index] == '\n')
+			{
+				Recv recv_packet = parseSerialBuffer(buffer);
 
-	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 4500);
-	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 900);
-	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 18000);
-	  printf("%d,%d\n", val1,val2);
+				int16_t rpm_1 = recv_packet.arm_1 * 36;
+				int16_t out_1 = pidCompute(&pid_1, rpm_1, fb.rpm[0], 0.02);
+				setCurrent(1, ROBOMASTER_M2006, out_1, &tx_packet);
 
-	  HAL_GPIO_TogglePin( GPIOA, GPIO_PIN_5 );
+				int16_t rpm_2 = recv_packet.arm_2 * 36;
+				int16_t out_2 = pidCompute(&pid_2, rpm_2, fb.rpm[1], 0.02);
+				setCurrent(2, ROBOMASTER_M2006, out_2, &tx_packet);
 
-	  HAL_Delay(20);
+				int16_t rpm_3 = recv_packet.arm_3 * 36;
+				int16_t out_3 = pidCompute(&pid_3, rpm_3, fb.rpm[2], 0.02);
+				setCurrent(3, ROBOMASTER_M2006, out_3, &tx_packet);
+
+				motor_1_control(recv_packet.pwm_1);
+				motor_2_control(recv_packet.pwm_2);
+				motor_3_control(recv_packet.pwm_3);
+
+				CAN_TX(0x200, tx_packet.buf_1, &hcan1);
+				HAL_Delay(20);
+
+				int encode_1 = get_encoder_1();
+				int encode_2 = get_encoder_2();
+
+				printf("%d,%d,%d\n", encode_1, encode_2, fb.ampare[2]);
+				index = 0;
+			}
+			else
+			{
+				index++;
+			}
+		}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -254,9 +299,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 89;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 17999;
+  htim1.Init.Period = 999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -426,9 +471,9 @@ static void MX_TIM8_Init(void)
 
   /* USER CODE END TIM8_Init 1 */
   htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 0;
+  htim8.Init.Prescaler = 89;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 65535;
+  htim8.Init.Period = 999;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -498,9 +543,9 @@ static void MX_TIM12_Init(void)
 
   /* USER CODE END TIM12_Init 1 */
   htim12.Instance = TIM12;
-  htim12.Init.Prescaler = 0;
+  htim12.Init.Prescaler = 44;
   htim12.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim12.Init.Period = 65535;
+  htim12.Init.Period = 999;
   htim12.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim12.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim12) != HAL_OK)
@@ -523,35 +568,35 @@ static void MX_TIM12_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
+  * @brief USART3 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART2_UART_Init(void)
+static void MX_USART3_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART3_Init 0 */
 
-  /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART3_Init 0 */
 
-  /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART3_Init 1 */
 
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE BEGIN USART3_Init 2 */
 
-  /* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART3_Init 2 */
 
 }
 
@@ -573,31 +618,119 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, DIR_3_Pin|DIR_1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DIR_2_GPIO_Port, DIR_2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PC4 PC5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
+  /*Configure GPIO pins : DIR_3_Pin DIR_1_Pin */
+  GPIO_InitStruct.Pin = DIR_3_Pin|DIR_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  /*Configure GPIO pin : DIR_2_Pin */
+  GPIO_InitStruct.Pin = DIR_2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(DIR_2_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	// 受信した際に送信元の情報とかが入る
+	CAN_RxHeaderTypeDef RxHeader;
 
+	//　受信したCANのデーターを格納する配列
+	uint8_t RxData[8];
+
+	// HAL_OKならRxDataに情報が入る。
+	if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &RxHeader, RxData)== HAL_OK) {
+
+		// モーターのIDが１番なら0x201が来るので関数で扱うため0x200を引くと1になる
+		uint32_t id = RxHeader.StdId - 0x200;
+
+		// parseRoboMasterFeedBack(モーターID、受信内容、RoboMasterFeedBack構造体ポインタ)
+		//受信内容の中から各エンコーダ値を取り出す。
+		parseRoboMasterFeedBack(id, RxData, &fb);
+	}
+}
+void motor_1_control(int pow)
+{
+	if(pow > 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, pow);
+		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 0);
+	}
+	else if(pow < 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, abs(pow));
+		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 1);
+	}
+	else
+	{
+		__HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_1_PIN, 0);
+	}
+}
+
+void motor_2_control(int pow)
+{
+	if(pow > 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, pow);
+		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 0);
+	}
+	else if(pow < 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, abs(pow));
+		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 1);
+	}
+	else
+	{
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_2_PIN, 0);
+	}
+}
+
+void motor_3_control(int pow)
+{
+	if(pow > 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, pow);
+		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 0);
+	}
+	else if(pow < 0)
+	{
+		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, abs(pow));
+		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 1);
+	}
+	else
+	{
+		__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_2, 0);
+		HAL_GPIO_WritePin(GPIOA, DIR_3_PIN, 0);
+	}
+}
+
+int get_encoder_1()
+{
+	val1 = (float)TIM3->CNT * 0.043945312;
+
+	return val1;
+}
+
+int get_encoder_2()
+{
+	val2 = (float)TIM2->CNT * 0.043945312;
+
+	return val2;
+}
 /* USER CODE END 4 */
 
 /**
