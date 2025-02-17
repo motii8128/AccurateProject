@@ -10,7 +10,7 @@
 
 # マイコンソフトウェア「AccurateHardware」
 
-![](./AccurateHardware/accurate_hardware.png)
+![Screenshot from 2025-02-17 10-26-59](https://github.com/user-attachments/assets/418674c4-6200-42e7-90f3-69739a3b4487)
 
 # マイコン制御基盤「AccurateBoard」
 
