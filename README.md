@@ -7,6 +7,7 @@
 |制御基盤|[AccurateBoard](https://github.com/motii8128/AccurateProject/tree/main/Accurate)|
 |電源基盤|[MainPowerSupplyer](https://github.com/motii8128/AccurateProject/tree/main/MainPowerSuppky)|
 |分電基盤|[PowerDivider](https://github.com/motii8128/AccurateProject/tree/main/PowerDivider)|
+|LED基盤|[led01](https://github.com/motii8128/AccurateProject/tree/main/led01)|
 
 # マイコンソフトウェア「AccurateHardware」
 
@@ -23,3 +24,7 @@
 # 分電基盤「PowerDivider」
 
 ![power_divider_image](./PowerDivider/power_divider.png)
+
+# LED基盤「led01」
+
+![led01_image](./led01/Screenshot from)
