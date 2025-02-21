@@ -27,4 +27,4 @@
 
 # LED基盤「led01」
 
-![led01_image](./led01/Screenshot from)
+![led01_image](./led01/led01.png)
