@@ -11,8 +11,8 @@
 
 #include <stdint.h>
 
-#define MAX_RPM 10000
-#define MAX_CURRENT 8000
+#define MAX_RPM 13000
+#define MAX_CURRENT 2000
 
 typedef struct PID
 {
@@ -25,7 +25,7 @@ typedef struct PID
 }PID;
 
 PID pidInitialize(float p_g, float i_g, float d_g);
-int16_t pidCompute(PID *pid, int16_t target, int16_t actual, float delta_time);
+int16_t pidCompute(PID *pid, int16_t target, int16_t actual, float delta_time, int16_t max_current);
 void integralLimit(PID *pid, float max, float min);
 
 
@@ -43,7 +43,7 @@ PID pidInitialize(float p_g, float i_g, float d_g)
 	return pid;
 }
 
-int16_t pidCompute(PID *pid, int16_t target, int16_t actual, float delta_time)
+int16_t pidCompute(PID *pid, int16_t target, int16_t actual, float delta_time, int16_t max_current)
 {
 	float prop = target - actual;
 	pid->integral += prop * delta_time;
@@ -54,7 +54,7 @@ int16_t pidCompute(PID *pid, int16_t target, int16_t actual, float delta_time)
 	integralLimit(pid, 1023, -1023);
 	float pid_out = pid->p_gain * prop + pid->i_gain * pid->integral + pid->d_gain * pid->lpf;
 
-	int16_t out_current = (int16_t)pid_out * MAX_CURRENT / MAX_RPM;
+	int16_t out_current = (int16_t)pid_out * max_current / MAX_RPM;
 
 
 	return out_current;
